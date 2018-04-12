@@ -1,5 +1,9 @@
 package org.fire.datasync.executor;
 
+import org.fire.datasync.common.Lifecycle;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.*;
@@ -8,20 +12,32 @@ import java.util.concurrent.*;
  * User: fire
  * Date: 2018-01-13
  */
-public class Schedulers {
+public class Schedulers implements Lifecycle {
+    private static final Logger log = LoggerFactory.getLogger(Schedulers.class);
+    public static final Schedulers INSTANCE = new Schedulers();
+
     private static ScheduledExecutorService ses;
     private static List<ScheduledFuture> runningTasks;
 
-    static {
+    private Schedulers() {
+        runningTasks = new ArrayList<>();
         ThreadFactory threadFactory = new NamedThreadFactory("schedulers");
         ses = Executors.newSingleThreadScheduledExecutor(threadFactory);
-        runningTasks = new ArrayList<>();
+    }
+
+    @Override
+    public void start() {
+    }
+
+    @Override
+    public void stop() {
+        close();
     }
 
     /**
      * 关闭任务调度器
      */
-    public static void close() {
+    public void close() {
         for (ScheduledFuture future : runningTasks) {
             future.cancel(false);
         }
@@ -37,7 +53,7 @@ public class Schedulers {
      * @param period   任务执行间隔
      * @param timeUnit 间隔时间单位
      */
-    public static void schedule(Runnable task, int delay, int period, TimeUnit timeUnit) {
+    public void schedule(Runnable task, int delay, int period, TimeUnit timeUnit) {
         ScheduledFuture future = ses.scheduleAtFixedRate(task, delay, period, timeUnit);
         runningTasks.add(future);
     }

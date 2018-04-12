@@ -2,6 +2,7 @@ package org.fire.datasync.task;
 
 import com.mongodb.*;
 import org.bson.types.BSONTimestamp;
+import org.fire.datasync.common.Lifecycle;
 import org.fire.datasync.executor.Schedulers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,7 +23,7 @@ import java.util.function.Consumer;
  * User: fire
  * Date: 2018-01-13
  */
-public class OPLogSyncTask {
+public class OPLogSyncTask implements Runnable, Lifecycle {
     private static final Logger log = LoggerFactory.getLogger(OPLogSyncTask.class);
 
     // 读取oplog时需要忽略带这种标识的数据，因为这仅代表数据迁移不代表真实数据操作
@@ -39,8 +40,9 @@ public class OPLogSyncTask {
     public static final String OP_UPDATE = "UPDATE";
     public static final String OP_DELETE = "DELETE";
 
+    public static final String DEFAULT_INSTANCE = "default";
+
     private volatile boolean running;
-    private Thread thread;
     private DBCollection oplogCollection;
     private BSONTimestamp timestamp;
     // 数据消费者
@@ -50,29 +52,26 @@ public class OPLogSyncTask {
     private boolean autocommit;
     private String instance;
 
-    public OPLogSyncTask(DBCollection collection, Consumer<OPLogMessage> consumer) {
+    public OPLogSyncTask(String instance, DBCollection collection, Consumer<OPLogMessage> consumer) {
+        this.instance = (instance != null ? instance : DEFAULT_INSTANCE);
         this.oplogCollection = Objects.requireNonNull(collection, "collection can not be null");
         this.consumer = Objects.requireNonNull(consumer, "consumer can not be null");
         this.autocommit = true;
-        thread = new Thread(() -> run());
     }
 
-    public void start() {
+    private void initialize() {
         running = true;
-        thread.start();
         startScheduleSaveTimestamp();
     }
 
+    @Override
+    public void start() {
+        initialize();
+    }
+
+    @Override
     public void stop() {
         running = false;
-        try {
-            // oplog以tail方式运行，如果当前没有数据可读则会一直阻塞，
-            // 所以这里需要手动interrupt以中断当前行为
-            thread.interrupt();
-            thread.join();
-        } catch (InterruptedException ie) {
-            // ignore
-        }
     }
 
     private void startScheduleSaveTimestamp() {
@@ -80,16 +79,19 @@ public class OPLogSyncTask {
             int period = 3;
             Runnable task = () -> {
                 try {
-                    Timestamps.set(timestamp);
+                    if (timestamp != null) {
+                        Timestamps.set(timestamp);
+                    }
                 } catch (Throwable t) {
-                    log.error("定时保存timestamp出错", t);
+                    log.error("failed to update timestamp", t);
                 }
             };
-            Schedulers.schedule(task, period, period, TimeUnit.SECONDS);
-            log.info("启动自动更新timestamp，间隔{}秒", period);
+            Schedulers.INSTANCE.schedule(task, period, period, TimeUnit.SECONDS);
+            log.info("start update timestamp, period={}", period);
         }
     }
 
+    @Override
     public void run() {
         while (running) {
             try (DBCursor cursor = oplogCursor(getTimestamp())) {
@@ -205,6 +207,7 @@ public class OPLogSyncTask {
         message.setCollection(table);
         message.setType(op);
         message.setData(data);
+        message.setInstance(instance);
 
         consumer.accept(message);
     }
@@ -223,10 +226,6 @@ public class OPLogSyncTask {
 
     public String getInstance() {
         return instance;
-    }
-
-    public void setInstance(String instance) {
-        this.instance = instance;
     }
 
     @Override

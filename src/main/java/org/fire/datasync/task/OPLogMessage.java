@@ -23,6 +23,7 @@ public class OPLogMessage {
 
     public OPLogMessage copy() {
         OPLogMessage copy = new OPLogMessage();
+        copy.instance = this.instance;
         copy.data = this.data;
         copy.database = this.database;
         copy.collection = this.collection;
@@ -72,5 +73,18 @@ public class OPLogMessage {
 
     public BSONTimestamp getTimestamp() {
         return data != null ? (BSONTimestamp) data.get(OPLogSyncTask.OPLOG_TIMESTAMP) : null;
+    }
+
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("OPLogMessage=[")
+                .append("type=").append(type)
+                .append(",instance=").append(instance)
+                .append(",database=").append(database)
+                .append(",collection=").append(collection)
+                .append(",data=").append(data)
+                .append("]");
+        return sb.toString();
     }
 }

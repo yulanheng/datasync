@@ -1,7 +1,10 @@
 package org.fire.datasync.task;
 
 import com.mongodb.*;
+import org.fire.datasync.common.Lifecycle;
 import org.fire.datasync.executor.SingleThreadExecutor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -12,7 +15,9 @@ import java.util.function.Consumer;
  * User: fire
  * Date: 2018-04-08
  */
-public abstract class DispatcherConsumer implements Consumer<OPLogMessage> {
+public class DispatcherConsumer implements Consumer<OPLogMessage>, Lifecycle {
+    private static final Logger log = LoggerFactory.getLogger(DispatcherConsumer.class);
+
     private MongoClient mongoClient;
     private ConcurrentMap<String, DBCollection> collectionMap = new ConcurrentHashMap<>();
     private static ConcurrentMap<String, SingleThreadExecutor> executors = new ConcurrentHashMap<>();
@@ -45,7 +50,9 @@ public abstract class DispatcherConsumer implements Consumer<OPLogMessage> {
         executor.execute(task);
     }
 
-    protected abstract void onMessage(OPLogMessage message);
+    protected void onMessage(OPLogMessage message) {
+        log.debug("onMessage>>>{}", message);
+    }
 
     private SingleThreadExecutor getExecutor(OPLogMessage message) {
         String key = determinConcurrencyLevel(message);
@@ -67,7 +74,8 @@ public abstract class DispatcherConsumer implements Consumer<OPLogMessage> {
      * @return
      */
     protected String determinConcurrencyLevel(OPLogMessage message) {
-        return message.getInstance() + ":" + message.getDatabase() + ":" + message.getCollection();
+//        return message.getInstance() + ":" + message.getDatabase() + ":" + message.getCollection();
+        return message.getInstance();
     }
 
     private DBCollection getCollection(String dbname, String collection) {
@@ -97,5 +105,14 @@ public abstract class DispatcherConsumer implements Consumer<OPLogMessage> {
         for (SingleThreadExecutor executor : executors.values()) {
             executor.stop();
         }
+    }
+
+    @Override
+    public void start() {
+    }
+
+    @Override
+    public void stop() {
+        close();
     }
 }

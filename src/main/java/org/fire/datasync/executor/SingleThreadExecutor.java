@@ -1,12 +1,21 @@
 package org.fire.datasync.executor;
 
+import org.fire.datasync.common.Lifecycle;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.concurrent.*;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.Executor;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadFactory;
 
-public class SingleThreadExecutor implements Executor {
+/**
+ * 单线程执行器，内部维护了一个有界任务队列，如果队列已满则添加任务操作
+ * 会一直阻塞直到队列有足够空间
+ */
+public class SingleThreadExecutor implements Executor, Lifecycle {
     private static final Logger log = LoggerFactory.getLogger(SingleThreadExecutor.class);
+
     private BlockingQueue<Runnable> taskQueue;
     private int maxAllowedTaskCount;
     private Thread thread;
@@ -14,13 +23,17 @@ public class SingleThreadExecutor implements Executor {
     private volatile boolean running;
     private ThreadFactory threadFactory;
 
+    /**
+     * @param name     执行器名称
+     * @param capacity 任务队列容量
+     */
     public SingleThreadExecutor(String name, int capacity) {
         this.name = name;
         this.maxAllowedTaskCount = capacity;
         this.taskQueue = makeTaskQueue();
         this.threadFactory = new NamedThreadFactory(name);
         this.running = true;
-        this.thread = threadFactory.newThread(() -> processTaskQueue());
+        this.thread = threadFactory.newThread(() -> process());
         this.thread.start();
     }
 
@@ -28,11 +41,14 @@ public class SingleThreadExecutor implements Executor {
         return new LinkedBlockingQueue<>(maxAllowedTaskCount);
     }
 
+    @Override
+    public void start() {
+    }
+
+    @Override
     public void stop() {
         running = false;
         try {
-            // oplog以tail方式运行，如果当前没有数据可读则会一直阻塞，
-            // 所以这里需要手动interrupt以中断当前行为
             thread.interrupt();
             thread.join();
         } catch (InterruptedException ie) {
@@ -40,21 +56,20 @@ public class SingleThreadExecutor implements Executor {
         }
     }
 
-    private void processTaskQueue() {
+    /**
+     * 执行器运行主流程，循环从队列中取出任务并执行
+     */
+    private void process() {
         while (running) {
             try {
-                Runnable task = taskQueue.poll();
+                Runnable task = taskQueue.take();
                 if (task != null) {
                     task.run();
-                } else {
-                    try {
-                        Thread.sleep(50);
-                    } catch (InterruptedException e) {
-                        // ignore
-                    }
                 }
             } catch (Throwable t) {
-                log.error("任务失败，队列名:{}", name, t);
+                if (running) {
+                    log.error("process failed:{}", name, t);
+                }
             }
         }
     }
@@ -66,18 +81,14 @@ public class SingleThreadExecutor implements Executor {
      */
     @Override
     public void execute(Runnable command) {
-        int tryCount = 0;
-        int waitMillis = 1000;
-        while (true) {
+        do {
             try {
-                if (taskQueue.offer(command, waitMillis, TimeUnit.MILLISECONDS)) {
-                    break;
-                }
+                taskQueue.put(command);
+                break;
             } catch (InterruptedException ie) {
-                // ignore
+                log.warn("put is interrupted");
+                continue;
             }
-            tryCount++;
-            log.warn("任务线程队列超时，队列名:{}，超时次数:{}", name, tryCount);
-        }
+        } while (true);
     }
 }

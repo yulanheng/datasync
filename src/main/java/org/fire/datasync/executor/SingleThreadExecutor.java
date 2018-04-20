@@ -7,7 +7,6 @@ import org.slf4j.LoggerFactory;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Executor;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ThreadFactory;
 
 /**
  * 单线程执行器，内部维护了一个有界任务队列，如果队列已满则添加任务操作
@@ -21,7 +20,6 @@ public class SingleThreadExecutor implements Executor, Lifecycle {
     private Thread thread;
     private String name;
     private volatile boolean running;
-    private ThreadFactory threadFactory;
 
     /**
      * @param name     执行器名称
@@ -31,10 +29,7 @@ public class SingleThreadExecutor implements Executor, Lifecycle {
         this.name = name;
         this.maxAllowedTaskCount = capacity;
         this.taskQueue = makeTaskQueue();
-        this.threadFactory = new NamedThreadFactory(name);
-        this.running = true;
-        this.thread = threadFactory.newThread(() -> process());
-        this.thread.start();
+        this.thread = new NamedThreadFactory(name).newThread(() -> process());
     }
 
     protected BlockingQueue<Runnable> makeTaskQueue() {
@@ -43,6 +38,8 @@ public class SingleThreadExecutor implements Executor, Lifecycle {
 
     @Override
     public void start() {
+        this.running = true;
+        this.thread.start();
     }
 
     @Override

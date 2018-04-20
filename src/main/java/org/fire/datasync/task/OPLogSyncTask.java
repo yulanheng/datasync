@@ -40,23 +40,19 @@ public class OPLogSyncTask implements Runnable, Lifecycle {
     public static final String OP_UPDATE = "UPDATE";
     public static final String OP_DELETE = "DELETE";
 
-    public static final String DEFAULT_INSTANCE = "default";
-
     private volatile boolean running;
     private DBCollection oplogCollection;
     private BSONTimestamp timestamp;
     // 数据消费者
     private Consumer<OPLogMessage> consumer;
-    // true表示OPLogSyncTask会自动更新oplog的timestamp
-    // 为false则需要用户自行更新timestamp
-    private boolean autocommit;
-    private String instance;
 
-    public OPLogSyncTask(String instance, DBCollection collection, Consumer<OPLogMessage> consumer) {
-        this.instance = (instance != null ? instance : DEFAULT_INSTANCE);
+    /**
+     * @param collection
+     * @param consumer
+     */
+    public OPLogSyncTask(DBCollection collection, Consumer<OPLogMessage> consumer) {
         this.oplogCollection = Objects.requireNonNull(collection, "collection can not be null");
         this.consumer = Objects.requireNonNull(consumer, "consumer can not be null");
-        this.autocommit = true;
     }
 
     private void initialize() {
@@ -74,21 +70,22 @@ public class OPLogSyncTask implements Runnable, Lifecycle {
         running = false;
     }
 
+    /**
+     * 启动定时任务保存timestamp
+     */
     private void startScheduleSaveTimestamp() {
-        if (autocommit) {
-            int period = 3;
-            Runnable task = () -> {
-                try {
-                    if (timestamp != null) {
-                        Timestamps.set(timestamp);
-                    }
-                } catch (Throwable t) {
-                    log.error("failed to update timestamp", t);
+        int period = 1;
+        Runnable task = () -> {
+            try {
+                if (timestamp != null) {
+                    Timestamps.set(timestamp);
                 }
-            };
-            Schedulers.INSTANCE.schedule(task, period, period, TimeUnit.SECONDS);
-            log.info("start update timestamp, period={}", period);
-        }
+            } catch (Throwable t) {
+                log.error("failed to update timestamp", t);
+            }
+        };
+        Schedulers.INSTANCE.schedule(task, period, period, TimeUnit.SECONDS);
+        log.info("start update timestamp, period={}", period);
     }
 
     @Override
@@ -107,6 +104,15 @@ public class OPLogSyncTask implements Runnable, Lifecycle {
         }
     }
 
+    /**
+     * 从指定timestamp处开始拉取oplog
+     * <p>
+     * 请注意，以TAILABLE方式获取的DBCursor在mongodb driver
+     * 内部是以一个while循环不停发送getmore命令到mongodb实现的
+     *
+     * @param timestamp oplog起始时间
+     * @return 一个持续等待数据、不超时的DBCursor
+     */
     private DBCursor oplogCursor(BSONTimestamp timestamp) {
         DBObject query = new BasicDBObject();
         query.put(OPLOG_TIMESTAMP, new BasicDBObject(QueryOperators.GT, timestamp));
@@ -115,6 +121,12 @@ public class OPLogSyncTask implements Runnable, Lifecycle {
         return oplogCollection.find(query).setOptions(options);
     }
 
+    /**
+     * 获取时间戳，首先获取最近一次保存的值，
+     * 获取不到则从mongodb中获取最新的值，仍旧获取不到则以当前时刻作为起始值
+     *
+     * @return
+     */
     private BSONTimestamp getTimestamp() {
         BSONTimestamp timestamp = Timestamps.get();
         if (timestamp == null) {
@@ -161,6 +173,11 @@ public class OPLogSyncTask implements Runnable, Lifecycle {
         TimeUnit.MILLISECONDS.sleep(500);
     }
 
+    /**
+     * 处理一条oplog数据
+     *
+     * @param dbObject
+     */
     private void process(DBObject dbObject) {
         if (dbObject.containsField(MONGODB_SHARDING_FLAG)) {
             return;
@@ -178,6 +195,8 @@ public class OPLogSyncTask implements Runnable, Lifecycle {
             log.warn("oplog ns字段无法区分库和表:{}，允许格式为:database.collection", ns);
             return;
         }
+        String database = arr[0];
+        String collection = arr[1];
 
         DBObject data = null;
         String opType = null;
@@ -193,21 +212,26 @@ public class OPLogSyncTask implements Runnable, Lifecycle {
         }
 
         if (data != null && opType != null) {
-            dispatch(arr[0], arr[1], data, opType);
+            dispatch(database, collection, data, opType);
         }
 
-        if (autocommit) {
-            updateTimestamp(dbObject);
-        }
+        updateTimestamp(dbObject);
     }
 
-    private void dispatch(String database, String table, DBObject data, String op) {
+    /**
+     * 将数据发往消费者
+     *
+     * @param database
+     * @param collection
+     * @param data
+     * @param op
+     */
+    private void dispatch(String database, String collection, DBObject data, String op) {
         OPLogMessage message = new OPLogMessage();
         message.setDatabase(database);
-        message.setCollection(table);
+        message.setCollection(collection);
         message.setType(op);
         message.setData(data);
-        message.setInstance(instance);
 
         consumer.accept(message);
     }
@@ -216,32 +240,19 @@ public class OPLogSyncTask implements Runnable, Lifecycle {
         this.timestamp = (BSONTimestamp) dbObject.get(OPLOG_TIMESTAMP);
     }
 
-    public void setAutocommit(boolean autocommit) {
-        this.autocommit = autocommit;
-    }
-
-    public boolean isAutocommit() {
-        return autocommit;
-    }
-
-    public String getInstance() {
-        return instance;
-    }
-
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append(OPLogSyncTask.class.getSimpleName())
-                .append("=[autocommit=").append(autocommit)
-                .append(",running=").append(running)
-                .append(",collection=").append(oplogCollection.getDB().getMongo().getAddress())
-                .append("timestamp=").append(timestamp)
+                .append("running=").append(running)
+                .append(",connection=").append(oplogCollection.getDB().getMongo().getAllAddress())
+                .append(",timestamp=").append(timestamp)
                 .append("]");
         return sb.toString();
     }
 
     /**
-     * 时间戳存储到项目本地文件中
+     * 以本地文件的形式存取时间戳
      */
     private static class Timestamps {
         private static final String tsTmpFile = "oplog.ts";

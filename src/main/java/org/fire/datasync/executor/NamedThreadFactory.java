@@ -12,10 +12,13 @@ public class NamedThreadFactory implements ThreadFactory {
     private final String namePrefix;
     private final AtomicInteger threadNumber = new AtomicInteger(1);
 
-    public NamedThreadFactory(String poolName) {
+    /**
+     * @param namePrefix 线程名前缀，使用同一个NamedThreadFactory实例创建出来的线程具有统一前缀
+     */
+    public NamedThreadFactory(String namePrefix) {
         SecurityManager s = System.getSecurityManager();
         group = (s != null) ? s.getThreadGroup() : Thread.currentThread().getThreadGroup();
-        namePrefix = "pool-" + poolName + "-thread-";
+        this.namePrefix = namePrefix;
     }
 
     /**

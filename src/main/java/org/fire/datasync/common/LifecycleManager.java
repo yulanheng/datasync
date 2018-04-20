@@ -21,7 +21,7 @@ public class LifecycleManager implements Lifecycle {
     }
 
     /**
-     * 添加声明周期管理单元，添加顺序将影响启动和停止的顺序
+     * 添加生命周期管理单元，单元将按照添加的顺序启动和停止
      *
      * @param lifecycle
      */

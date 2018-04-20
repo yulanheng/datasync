@@ -8,11 +8,9 @@ import org.bson.types.BSONTimestamp;
  * User: fire
  * Date: 2018-01-13
  */
-public class OPLogMessage {
+public class OPLogMessage implements Cloneable {
     // 数据操作类型：INSERT、UPDATE、DELETE
     private String type;
-    // 数据库实例
-    private String instance;
     // 数据所在数据库名
     private String database;
     // 数据所在表名
@@ -20,16 +18,6 @@ public class OPLogMessage {
     // 有效数据
     // 注意：更新、删除操作这里存放的是操作条件
     private DBObject data;
-
-    public OPLogMessage copy() {
-        OPLogMessage copy = new OPLogMessage();
-        copy.instance = this.instance;
-        copy.data = this.data;
-        copy.database = this.database;
-        copy.collection = this.collection;
-        copy.type = this.type;
-        return copy;
-    }
 
     public DBObject getData() {
         return data;
@@ -45,14 +33,6 @@ public class OPLogMessage {
 
     public void setType(String type) {
         this.type = type;
-    }
-
-    public String getInstance() {
-        return instance;
-    }
-
-    public void setInstance(String instance) {
-        this.instance = instance;
     }
 
     public String getDatabase() {
@@ -80,11 +60,19 @@ public class OPLogMessage {
         StringBuilder sb = new StringBuilder();
         sb.append("OPLogMessage=[")
                 .append("type=").append(type)
-                .append(",instance=").append(instance)
                 .append(",database=").append(database)
                 .append(",collection=").append(collection)
                 .append(",data=").append(data)
                 .append("]");
         return sb.toString();
+    }
+
+    @Override
+    public OPLogMessage clone() {
+        try {
+            return (OPLogMessage) super.clone();
+        } catch (CloneNotSupportedException cnse) {
+            throw new RuntimeException(cnse);
+        }
     }
 }

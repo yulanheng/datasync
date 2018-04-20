@@ -54,7 +54,6 @@ public class Schedulers implements Lifecycle {
      * @param timeUnit 间隔时间单位
      */
     public void schedule(Runnable task, int delay, int period, TimeUnit timeUnit) {
-        ScheduledFuture future = ses.scheduleAtFixedRate(task, delay, period, timeUnit);
-        runningTasks.add(future);
+        runningTasks.add(ses.scheduleWithFixedDelay(task, delay, period, timeUnit));
     }
 }

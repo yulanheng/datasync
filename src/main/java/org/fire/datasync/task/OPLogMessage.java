@@ -16,9 +16,12 @@ public class OPLogMessage implements Cloneable {
     // 数据所在表名
     private String collection;
     // 有效数据
-    // 注意：更新、删除操作这里存放的是操作条件
     private DBObject data;
 
+    /**
+     * @return mongo变更数据，对于插入操作返回的是插入对象，
+     * 对于更新、删除操作返回的是更新、删除操作条件
+     */
     public DBObject getData() {
         return data;
     }
@@ -27,6 +30,9 @@ public class OPLogMessage implements Cloneable {
         this.data = data;
     }
 
+    /**
+     * @return 数据操作类型，INSERT:插入，UPDATE:更新，DELETE:删除
+     */
     public String getType() {
         return type;
     }
@@ -35,6 +41,9 @@ public class OPLogMessage implements Cloneable {
         this.type = type;
     }
 
+    /**
+     * @return 发生变更的数据库
+     */
     public String getDatabase() {
         return database;
     }
@@ -43,6 +52,9 @@ public class OPLogMessage implements Cloneable {
         this.database = database;
     }
 
+    /**
+     * @return 发生变更的集合
+     */
     public String getCollection() {
         return collection;
     }
@@ -51,6 +63,9 @@ public class OPLogMessage implements Cloneable {
         this.collection = collection;
     }
 
+    /**
+     * @return 发生变更的时间戳
+     */
     public BSONTimestamp getTimestamp() {
         return data != null ? (BSONTimestamp) data.get(OPLogSyncTask.OPLOG_TIMESTAMP) : null;
     }

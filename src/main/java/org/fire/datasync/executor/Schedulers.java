@@ -1,8 +1,6 @@
 package org.fire.datasync.executor;
 
 import org.fire.datasync.common.Lifecycle;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -13,7 +11,6 @@ import java.util.concurrent.*;
  * Date: 2018-01-13
  */
 public class Schedulers implements Lifecycle {
-    private static final Logger log = LoggerFactory.getLogger(Schedulers.class);
     public static final Schedulers INSTANCE = new Schedulers();
 
     private static ScheduledExecutorService ses;

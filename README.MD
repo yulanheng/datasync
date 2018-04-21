@@ -9,7 +9,8 @@ datasync只提供一个轻微的监听内核，实现了持续监听oplog数据�
 
 ## datasync能做什么？
 datasync虽然只实现了基本的监听功能，但通过强大的Consumer接口你可以实现任何想要的功能，
-比如你可以实现一个KafkaConsumer用来将数据发往kafka。
+比如你可以实现一个KafkaConsumer用来将数据发往kafka。默认情况下datasync监听所有插入、更新、
+删除操作记录。如果需要过滤特定的数据库或者集合，可以在自定义Consumer中实现过滤功能。
 
 ## 原理
 mongodb replicaset之间是使用oplog来实现复制集数据同步的，

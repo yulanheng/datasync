@@ -192,7 +192,7 @@ public class OPLogSyncTask implements Runnable, Lifecycle {
 
         String[] arr = ns.split("\\.");
         if (arr.length < 2) {
-            log.warn("oplog ns字段无法区分库和表:{}，允许格式为:database.collection", ns);
+            log.warn("wrong format of ns:{}", ns);
             return;
         }
         String database = arr[0];
@@ -273,8 +273,6 @@ public class OPLogSyncTask implements Runnable, Lifecycle {
                         int time = Integer.parseInt(arr[0]);
                         int incr = Integer.parseInt(arr[1]);
                         timestamp = new BSONTimestamp(time, incr);
-                    } else {
-                        log.warn("oplog时间戳格式错误:{}", line);
                     }
                 }
             } catch (IOException ioe) {
